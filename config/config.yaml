@@ -1,0 +1,46 @@
+# IBKR trading engine configuration.
+# Secrets never live here -- use .env / environment variables (see .env.example).
+
+gateway:
+  host: 127.0.0.1
+  port: 4002          # 4002 = paper, 4001 = live
+  client_id: 10
+  timeout: 30
+
+runtime:
+  dry_run: true       # safety default; override with --live or IBKR_DRY_RUN=false
+  timezone: America/New_York
+  log_level: INFO
+  db_path: state/ibkr.sqlite3
+  # Leave `accounts` empty to manage every account the Gateway reports.
+  accounts:
+    DU1111111:
+      enabled: true
+  guards:
+    kill_switch: false
+    max_order_usd: 250000
+    min_order_usd: 1
+    allowed_symbols: []   # empty = allow anything the strategies emit
+
+# Strategies run in the order listed. Add future strategies as new blocks.
+strategies:
+  noop:
+    enabled: true
+
+  cash_sweep:
+    enabled: true
+    accounts:
+      DU1111111:
+        enabled: true
+        # reserve_usd: 10000   # optional per-account override
+    reserve:
+      mode: max        # fixed | percent | max
+      fixed_usd: 5000
+      percent: 1.0     # percent of NetLiquidation to keep available
+    min_order_usd: 100
+    max_order_usd: 250000
+    universe:
+      - {symbol: SGOV, sec_type: STK, exchange: SMART, currency: USD, source: ib_dividends}
+      - {symbol: BIL,  sec_type: STK, exchange: SMART, currency: USD, source: ib_dividends}
+      # Money market funds (yield via fundamental data):
+      # - {symbol: VMFXX, sec_type: MUTUALFUND, exchange: "", currency: USD, source: fundamental}

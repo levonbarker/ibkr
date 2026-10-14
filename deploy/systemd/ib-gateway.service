@@ -1,0 +1,21 @@
+[Unit]
+Description=IB Gateway (via IBC)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+WorkingDirectory=@REPO_DIR@
+EnvironmentFile=/etc/ibkr/gateway.env
+ExecStart=/opt/ibkr/run-gateway.sh
+
+# IBKR force-logs-out daily; IBC restarts the session. If IBC itself exits
+# (e.g. 2FA timeout with TWOFA_TIMEOUT_ACTION=exit), bring it back.
+Restart=always
+RestartSec=30
+TimeoutStopSec=120
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

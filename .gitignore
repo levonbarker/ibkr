@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Local runtime data
+*.db
+*.sqlite3
+state/
+logs/
+*.log
+
+# Secrets / local config
+.env
+config/local.yaml

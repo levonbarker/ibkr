@@ -1,0 +1,66 @@
+# IBC configuration for the IB Gateway used by ibkr-trader.
+#
+# This is a trimmed template covering the settings that matter for unattended
+# operation. IBC's full sample contains many more options and detailed notes:
+#   https://github.com/IbcAlpha/IBC/blob/master/resources/config.ini
+#
+# Place a copy at /etc/ibkr/config.ini, owned by the service user, mode 600.
+#   sudo install -m 600 -o <user> -g <group> config.ini.example /etc/ibkr/config.ini
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+IbLoginId=CHANGE_ME
+IbPassword=CHANGE_ME
+
+# 'paper' or 'live'.
+TradingMode=paper
+
+# Auto-accept the "not a brokerage account" warning on paper logins, otherwise
+# TWS/Gateway blocks API connections until it is dismissed.
+AcceptNonBrokerageAccountWarning=yes
+
+# ---------------------------------------------------------------------------
+# Second factor authentication (you handle the IBKR Mobile prompts)
+# ---------------------------------------------------------------------------
+# Re-open the login dialog if the 2FA alert times out, so the next alert can
+# be answered. Pair this with TWOFA_TIMEOUT_ACTION=exit in gateway.env and
+# systemd's Restart=always.
+ReloginAfterSecondFactorAuthenticationTimeout=yes
+SecondFactorAuthenticationExitInterval=120
+
+# ---------------------------------------------------------------------------
+# API access
+# ---------------------------------------------------------------------------
+# Keep this secure: reject unsolicited inbound API connections and instead
+# whitelist 127.0.0.1 in the TWS/Gateway API configuration dialog.
+AcceptIncomingConnectionAction=reject
+
+# Allow API programs to submit/modify/cancel orders.
+ReadOnlyApi=no
+
+# Pin the API port to match config/config.yaml (4002 paper, 4001 live).
+# Only set this if you need it; otherwise configure the port once in the GUI.
+#OverrideTwsApiPort=4002
+
+# ---------------------------------------------------------------------------
+# Daily restart / shutdown (IBKR force-logs-out daily)
+# ---------------------------------------------------------------------------
+# Take over any existing session so an unattended restart always wins.
+ExistingSessionDetectedAction=primaryoverride
+
+# Tidy daily restart without re-authentication (credentials are reused).
+AutoRestartTime=11:45 PM
+
+# Full re-authentication once a week (must be after 01:00 US/Eastern Sunday).
+ColdRestartTime=13:00
+
+# Shut down for the weekend after Friday's close.
+ClosedownAt=Friday 22:00
+
+MinimizeMainWindow=yes
+
+# ---------------------------------------------------------------------------
+# IBC command server (optional; 0 = disabled)
+# ---------------------------------------------------------------------------
+CommandServerPort=0

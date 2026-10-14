@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily IBKR cash sweep
+
+[Timer]
+# Weekdays at 15:30 local time (adjust to your needs).
+OnCalendar=Mon..Fri 15:30
+Persistent=true
+Unit=ibkr-sweep.service
+
+[Install]
+WantedBy=timers.target
