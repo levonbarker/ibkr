@@ -78,14 +78,22 @@ strategies:
 
 ### Cash sweep logic
 
-1. `sweepable = min(cash, settled) - reserve` (reserve = fixed / percent / max).
-2. Rank the universe by current yield (memoised + cached in SQLite).
-3. Size: mutual funds use dollar-based `cashQty`; ETFs use whole shares.
+1. `sweepable = min(cash, settled) - reserve` (reserve = fixed / percent / max),
+   all in the **account's base currency**.
+2. Rank the universe by current yield, considering only instruments whose
+   currency matches the account's base currency.
+3. Size: mutual funds use dollar-based `cashQty`; ETFs use whole shares
+   (priced off IB market data).
 4. Emit one `Intent` per account; the engine handles guards and idempotency.
 
-Yield sources: `ib_dividends` (IB Dividends tick 456) for ETFs,
-`fundamental` (`ReportsFinSummary`) for money market funds. Unknown yields are
-never guessed -- the account is skipped and logged.
+Yield sources: `ib_dividends` (IB Dividends tick 456, streaming) for ETFs,
+`fundamental` (`ReportsFinSummary`) for money market funds. If the live feed is
+unavailable (e.g. no market-data subscription for the exchange), a per-entry
+`fallback_yield` is used and a warning is logged. Unknown yields are never
+guessed silently -- without a fallback the account is skipped.
+
+Pricing uses `gateway.market_data_type` (default `1` realtime); set it to `3`
+for delayed data, which works without a market-data subscription.
 
 ## Adding a strategy
 
@@ -93,14 +101,17 @@ never guessed -- the account is skipped and logged.
 from ibkr_trader.core.registry import register
 from ibkr_trader.strategies.base import Strategy, StrategyConfig
 
+
 @register
 class MyStrategy(Strategy):
     name = "my_strategy"
     config_cls = StrategyConfig
 
-    def enabled_accounts(self, ctx): return ctx.accounts
+    def enabled_accounts(self, ctx):
+        return ctx.accounts
+
     def plan(self, ctx, account):
-        return []   # build Intent(...) objects here
+        return []  # build Intent(...) objects here
 ```
 
 Drop the module under `src/ibkr_trader/strategies/`, import it in

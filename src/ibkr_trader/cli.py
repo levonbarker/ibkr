@@ -17,7 +17,7 @@ from ibkr_trader.util.notify import Notifier
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ibkr-run", description="Run IBKR strategies once")
-    p.add_argument("--config", default="config/config.yaml", help="path to config yaml")
+    p.add_argument("--config", default=None, help="path to config yaml (default: auto-locate)")
     p.add_argument("--live", action="store_true", help="transmit real orders (disables dry-run)")
     p.add_argument("--dry-run", action="store_true", help="force planning only, never transmit")
     p.add_argument(
@@ -37,7 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if args.live:
         config.runtime.dry_run = False
     if args.dry_run:

@@ -31,6 +31,9 @@ class UniverseEntry(BaseModel):
     exchange: str = "SMART"
     currency: str = "USD"
     source: Literal["ib_dividends", "fundamental"] = "ib_dividends"
+    # Used only when the live yield feed is unavailable (e.g. no market-data
+    # subscription). Never used silently -- the strategy logs a warning.
+    fallback_yield: Decimal | None = None
     model_config = {"extra": "forbid"}
 
 

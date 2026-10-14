@@ -6,6 +6,7 @@ the :class:`~ibkr_trader.broker.base.Broker` protocol.
 
 from __future__ import annotations
 
+import math
 import re
 from decimal import Decimal, InvalidOperation
 
@@ -32,6 +33,19 @@ def _to_instrument(contract: Contract) -> Instrument:
     )
 
 
+def _price(value: float | Decimal | str | None) -> Decimal | None:
+    """Convert a possibly-NaN/None IBKR price to Decimal, or None."""
+    if value is None:
+        return None
+    try:
+        if math.isnan(float(value)):
+            return None
+    except (TypeError, ValueError):
+        return None
+    dec = _dec(value)
+    return dec if dec > 0 else None
+
+
 class IbkrBroker:
     def __init__(self, config: GatewayConfig) -> None:
         self.config = config
@@ -51,6 +65,9 @@ class IbkrBroker:
             timeout=self.config.timeout,
             readonly=self.config.readonly,
         )
+        # 3 = delayed, 4 = delayed-frozen, 1 = realtime. Delayed avoids
+        # requiring a market-data subscription for snapshot pricing.
+        self.ib.reqMarketDataType(self.config.market_data_type)
 
     def disconnect(self) -> None:
         if self.ib.isConnected():
@@ -63,16 +80,26 @@ class IbkrBroker:
     def account_values(self, account: str) -> dict[str, Decimal]:
         values: dict[str, Decimal] = {}
         for item in self.ib.accountValues(account):
-            if not item.currency or item.currency == "BASE":
-                values[item.tag] = _dec(item.value)
+            if item.tag.startswith("$LEDGER"):
+                continue
+            # Tags may repeat per currency; keep the BASE row when present.
+            if item.tag in values and item.currency != "BASE":
+                continue
+            values[item.tag] = _dec(item.value)
         return values
 
     def account_currency_balances(self, account: str) -> dict[str, Decimal]:
         balances: dict[str, Decimal] = {}
         for item in self.ib.accountValues(account):
-            if item.tag == "CashBalance" and item.currency:
+            if item.tag == "$LEDGER-CashBalance" and item.currency:
                 balances[item.currency] = _dec(item.value)
         return balances
+
+    def base_currency(self, account: str) -> str:
+        for item in self.ib.accountValues(account):
+            if item.tag == "NetLiquidation" and item.currency and item.currency != "BASE":
+                return item.currency
+        return "USD"
 
     def positions(self, account: str) -> list[Position]:
         return [
@@ -129,9 +156,19 @@ class IbkrBroker:
             currency=instrument.currency,
         )
 
+    def _qualified(self, instrument: Instrument) -> Contract:
+        """Return a conId-qualified contract (required by reqMktData/orders)."""
+        contract = self._contract(instrument)
+        try:
+            qualified = self.ib.qualifyContracts(contract)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("qualify failed for %s: %s", instrument.label, exc)
+            qualified = []
+        return qualified[0] if qualified else contract
+
     # -- orders -------------------------------------------------------------
     def place_order(self, intent: Intent) -> Result:
-        contract = self._contract(intent.instrument)
+        contract = self._qualified(intent.instrument)
         if intent.cash_quantity is not None:
             order = Order(
                 action=intent.side,
@@ -162,29 +199,30 @@ class IbkrBroker:
 
     # -- market data --------------------------------------------------------
     def last_price(self, instrument: Instrument) -> Decimal | None:
-        contract = self._contract(instrument)
+        contract = self._qualified(instrument)
         ticker = self.ib.reqMktData(contract, "", snapshot=True)
         self.ib.sleep(2)
-        price = ticker.marketPrice() or ticker.close
+        price = _price(ticker.marketPrice()) or _price(ticker.close) or _price(ticker.last)
         self.ib.cancelMktData(contract)
-        return _dec(price) if price else None
+        return price
 
     def dividend_yield(self, instrument: Instrument) -> Decimal | None:
-        contract = self._contract(instrument)
-        ticker = self.ib.reqMktData(contract, genericTickList="456", snapshot=True)
-        self.ib.sleep(2)
+        contract = self._qualified(instrument)
+        # Dividend data arrives only on a streaming (non-snapshot) request.
+        ticker = self.ib.reqMktData(contract, genericTickList="456", snapshot=False)
+        self.ib.sleep(3)
         dividends = getattr(ticker, "dividends", None)
-        price = ticker.marketPrice() or ticker.close
+        price = _price(ticker.marketPrice()) or _price(ticker.close)
         self.ib.cancelMktData(contract)
-        if not dividends or not price:
+        if not dividends or price is None:
             return None
         annual = dividends.next12Months or dividends.past12Months
         if not annual:
             return None
-        return (Decimal(str(annual)) / Decimal(str(price)) * 100).quantize(Decimal("0.0001"))
+        return (Decimal(str(annual)) / price * 100).quantize(Decimal("0.0001"))
 
     def fund_yield(self, instrument: Instrument) -> Decimal | None:
-        contract = self._contract(instrument)
+        contract = self._qualified(instrument)
         try:
             xml = self.ib.reqFundamentalData(contract, "ReportsFinSummary")
         except Exception as exc:  # noqa: BLE001

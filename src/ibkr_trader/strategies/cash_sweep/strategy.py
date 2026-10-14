@@ -119,7 +119,7 @@ class CashSweepStrategy(Strategy):
 
     # -- helpers ------------------------------------------------------------
     def sweepable_cash(self, snapshot: AccountSnapshot) -> Decimal:
-        balance = snapshot.cash("USD")
+        balance = snapshot.cash()
         settled = snapshot.value("SettledCash", balance)
         available = min(balance, settled) if settled > 0 else balance
         return available - self.reserve_for(snapshot)
@@ -141,6 +141,8 @@ class CashSweepStrategy(Strategy):
         held = {p.instrument.symbol for p in snapshot.positions}
         scored: list[tuple[Decimal, int, int]] = []
         for idx, entry in enumerate(self.cfg.universe):
+            if entry.currency != snapshot.base_currency:
+                continue
             instrument = Instrument(
                 symbol=entry.symbol,
                 sec_type=entry.sec_type,
@@ -148,6 +150,13 @@ class CashSweepStrategy(Strategy):
                 currency=entry.currency,
             )
             yld = ctx.yields.get(instrument, entry.source)
+            if yld is None and entry.fallback_yield is not None:
+                log.warning(
+                    "cash_sweep: no live yield for %s, using configured fallback %s",
+                    entry.symbol,
+                    entry.fallback_yield,
+                )
+                yld = entry.fallback_yield
             if yld is None:
                 log.info("cash_sweep: no yield for %s, ignoring", entry.symbol)
                 continue

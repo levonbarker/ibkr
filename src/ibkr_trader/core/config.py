@@ -17,6 +17,8 @@ class GatewayConfig(BaseModel):
     client_id: int = 10
     timeout: float = 30.0
     readonly: bool = False
+    # 1 = realtime, 3 = delayed, 4 = delayed-frozen.
+    market_data_type: int = 1
 
 
 class AccountSetting(BaseModel):
@@ -58,11 +60,34 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
-def load_config(path: str | Path = "config/config.yaml") -> AppConfig:
-    data: dict[str, Any] = {}
-    p = Path(path)
-    if p.exists():
-        data = yaml.safe_load(p.read_text()) or {}
+def _repo_root() -> Path:
+    # src/ibkr_trader/core/config.py -> repo root
+    return Path(__file__).resolve().parents[3]
+
+
+def resolve_config_path(path: str | Path | None) -> Path:
+    """Locate the config file.
+
+    An explicit path must exist. For the default (``None``), look in the
+    current directory first, then the repo root, so runs work from anywhere.
+    """
+    if path is not None:
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(f"config file not found: {p}")
+        return p
+    for candidate in (
+        Path.cwd() / "config" / "config.yaml",
+        _repo_root() / "config" / "config.yaml",
+    ):
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError("no config/config.yaml found; pass --config <path>")
+
+
+def load_config(path: str | Path | None = None) -> AppConfig:
+    resolved = resolve_config_path(path)
+    data: dict[str, Any] = yaml.safe_load(resolved.read_text()) or {}
 
     config = AppConfig.model_validate(data)
 

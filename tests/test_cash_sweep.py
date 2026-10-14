@@ -108,3 +108,47 @@ def test_enabled_accounts_respects_overrides(ctx, broker: SimulatedBroker):
     ctx.accounts = ["DU1", "DU2"]
     strategy = _strategy(ctx, accounts={"DU2": {"enabled": False}})
     assert strategy.enabled_accounts(ctx) == ["DU1"]
+
+
+def test_universe_filtered_by_base_currency(ctx, broker: SimulatedBroker):
+    broker.set_base_currency(ACCOUNT, "CAD")
+    broker.set_balance(ACCOUNT, "CAD", Decimal("100000")).set_value(
+        ACCOUNT, "NetLiquidation", Decimal("100000")
+    )
+    broker.set_yield("SGOV", Decimal("9.0")).set_price("SGOV", Decimal("100"))
+    broker.set_yield("CBIL", Decimal("3.0")).set_price("CBIL", Decimal("50"))
+
+    strategy = _strategy(
+        ctx,
+        universe=[
+            {"symbol": "SGOV", "sec_type": "STK", "currency": "USD"},
+            {"symbol": "CBIL", "sec_type": "STK", "exchange": "TSE", "currency": "CAD"},
+        ],
+    )
+    intents = strategy.plan(ctx, ACCOUNT)
+    # SGOV has the higher yield but is USD -> ignored for a CAD account.
+    assert intents[0].instrument.symbol == "CBIL"
+
+
+def test_fallback_yield_used_when_feed_unavailable(ctx, broker: SimulatedBroker):
+    broker.set_base_currency(ACCOUNT, "CAD")
+    broker.set_balance(ACCOUNT, "CAD", Decimal("100000")).set_value(
+        ACCOUNT, "NetLiquidation", Decimal("100000")
+    )
+    broker.set_yield("CBIL", None)  # feed unavailable
+    broker.set_price("CBIL", Decimal("50"))
+
+    strategy = _strategy(
+        ctx,
+        universe=[
+            {
+                "symbol": "CBIL",
+                "sec_type": "STK",
+                "exchange": "TSE",
+                "currency": "CAD",
+                "fallback_yield": 3.3,
+            }
+        ],
+    )
+    intents = strategy.plan(ctx, ACCOUNT)
+    assert intents[0].instrument.symbol == "CBIL"

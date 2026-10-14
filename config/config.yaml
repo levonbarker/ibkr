@@ -6,6 +6,7 @@ gateway:
   port: 4002          # 4002 = paper, 4001 = live
   client_id: 10
   timeout: 30
+  market_data_type: 3 # 1=realtime, 3=delayed, 4=delayed-frozen
 
 runtime:
   dry_run: true       # safety default; override with --live or IBKR_DRY_RUN=false
@@ -13,9 +14,7 @@ runtime:
   log_level: INFO
   db_path: state/ibkr.sqlite3
   # Leave `accounts` empty to manage every account the Gateway reports.
-  accounts:
-    DU1111111:
-      enabled: true
+  accounts: {}
   guards:
     kill_switch: false
     max_order_usd: 250000
@@ -29,10 +28,9 @@ strategies:
 
   cash_sweep:
     enabled: true
-    accounts:
-      DU1111111:
-        enabled: true
-        # reserve_usd: 10000   # optional per-account override
+    # Per-account overrides go here, e.g.
+    #   DUR269426: {enabled: true, reserve_usd: 10000}
+    accounts: {}
     reserve:
       mode: max        # fixed | percent | max
       fixed_usd: 5000
@@ -40,6 +38,13 @@ strategies:
     min_order_usd: 100
     max_order_usd: 250000
     universe:
+      # Only instruments matching the account's base currency are considered.
+      # CAD cash-equivalent ETFs (TSX). fallback_yield is used only when the
+      # live dividend feed is unavailable (e.g. no TSX data subscription).
+      - {symbol: CBIL, sec_type: STK, exchange: TSE, currency: CAD, source: ib_dividends, fallback_yield: 3.30}
+      - {symbol: CASH, sec_type: STK, exchange: TSE, currency: CAD, source: ib_dividends, fallback_yield: 3.10}
+      - {symbol: PSA,  sec_type: STK, exchange: TSE, currency: CAD, source: ib_dividends, fallback_yield: 3.20}
+      # USD cash-equivalent ETFs
       - {symbol: SGOV, sec_type: STK, exchange: SMART, currency: USD, source: ib_dividends}
       - {symbol: BIL,  sec_type: STK, exchange: SMART, currency: USD, source: ib_dividends}
       # Money market funds (yield via fundamental data):

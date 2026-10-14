@@ -17,6 +17,7 @@ from ibkr_trader.broker.market_data import YieldProvider
 @dataclass
 class AccountSnapshot:
     account: str
+    base_currency: str
     values: dict[str, Decimal]
     balances: dict[str, Decimal]
     positions: list[Position]
@@ -25,8 +26,8 @@ class AccountSnapshot:
     def value(self, tag: str, default: Decimal = Decimal("0")) -> Decimal:
         return self.values.get(tag, default)
 
-    def cash(self, currency: str = "USD") -> Decimal:
-        return self.balances.get(currency, Decimal("0"))
+    def cash(self, currency: str | None = None) -> Decimal:
+        return self.balances.get(currency or self.base_currency, Decimal("0"))
 
 
 @dataclass
@@ -43,6 +44,7 @@ class TradingContext:
         if cached is None:
             cached = AccountSnapshot(
                 account=account,
+                base_currency=self.broker.base_currency(account),
                 values=self.broker.account_values(account),
                 balances=self.broker.account_currency_balances(account),
                 positions=self.broker.positions(account),

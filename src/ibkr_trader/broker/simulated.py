@@ -21,6 +21,7 @@ class SimulatedBroker:
     _open_orders: dict[str, list[OpenOrder]] = field(default_factory=dict)
     _yields: dict[str, Decimal | None] = field(default_factory=dict)
     _prices: dict[str, Decimal] = field(default_factory=dict)
+    _base_currency: dict[str, str] = field(default_factory=dict)
     placed: list[Intent] = field(default_factory=list)
     connected: bool = False
 
@@ -32,6 +33,9 @@ class SimulatedBroker:
 
     def accounts(self) -> list[str]:
         return list(self._accounts)
+
+    def base_currency(self, account: str) -> str:
+        return self._base_currency.get(account, "USD")
 
     def account_values(self, account: str) -> dict[str, Decimal]:
         return dict(self._values.get(account, {}))
@@ -83,6 +87,14 @@ class SimulatedBroker:
 
     def set_price(self, symbol: str, value: Decimal) -> SimulatedBroker:
         self._prices[symbol] = Decimal(value)
+        return self
+
+    def set_base_currency(self, account: str, currency: str) -> SimulatedBroker:
+        self._base_currency[account] = currency
+        return self
+
+    def set_balance(self, account: str, currency: str, amount: Decimal) -> SimulatedBroker:
+        self._balances.setdefault(account, {})[currency] = Decimal(amount)
         return self
 
     def add_position(
